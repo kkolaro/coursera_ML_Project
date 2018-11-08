@@ -1,0 +1,133 @@
+---
+title: "Course ML - Project"
+author: "Klod Kolaro"
+date: "November 8, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions:
+exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), 
+lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.
+The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience.  
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+```{r }
+options(warn=-1)
+library(caTools)
+library(caret)
+library(ggplot2)
+library(dplyr)
+library(sqldf)
+```
+
+
+# Data import
+
+
+```{r }
+getwd()
+setwd("C:/Users/kkolaro/Desktop/Private/ucenje/Coursera/machine learning/project")
+data_training<-read.csv("pml-training.csv",na.strings = c("NA","#DIV/0!", " "))
+dim(data_training)
+data_test<-read.csv("pml-testing.csv",na.strings = c("NA","#DIV/0!", " "))
+set.seed(12345)
+```
+
+
+#Exploratory  analysis
+
+
+```{r }
+unique(data_training$classe)
+unique(data_training$user_name)
+summary(data_training$classe)
+
+# Total number of exercises per classe
+
+sqldf("select count(classe) as Total_number,classe from data_training group by classe order by Total_number desc")
+summary(data_training[,c("classe")])
+
+barplot(table(data_training$classe), main = "Classe distribution", beside=FALSE,xlab="Clasee",ylab="Number of activity",col="red")
+
+# Total number of exercises  per user
+
+sqldf("select count(classe) as Total_number,user_name from data_training group by user_name order by Total_number desc")
+
+# Participants per classes
+
+sqldf("select count(classe),user_name,classe from data_training group by user_name,classe")
+usr_class<-prop.table(table(data_training$classe,data_training$user_name),2)#procentage of user perclass
+print(usr_class)
+
+barplot(usr_class, main="Distribution of participants activities per clasee",xlab = "User",legend = row.names(usr_class),beside=TRUE,col=c("darkblue","red","green","cyan","white"),,xlim=c(0, ncol(usr_class) + 37))
+
+# Classes per participants
+
+class_usr<-prop.table(table(data_training$user_name,data_training$classe),2)#class per user
+print(class_usr)
+barplot(class_usr, main="Classe distribution per paricipants",xlab = "Classe",legend = row.names(class_usr),beside=TRUE,col=c("darkblue","red","green","cyan","white","yellow"),xlim=c(0, ncol(class_usr) + 39))
+```
+
+## Key findings:
+
+Max number of activities is of classe A - 5580 and min of classe D - 3216
+Out of total number of A classe ,Jeremy contribute with  21,1%  ,and  Pedro only 11,4%
+The highest % of class A  had Jeremy 34,59% and the lowest Pedro 24,5%
+
+
+#Data cleansing & transformation
+
+
+```{r }
+data_training_NA<-sapply(data_training, function(x)all(!is.na(x)))
+data_test_NA<-sapply(data_test, function(x)all(!is.na(x)))
+
+data_training<-data_training[,data_training_NA]
+data_test<-data_test[,data_test_NA]
+
+data_training<-subset(data_training, select = -c(X,user_name))
+data_test<-subset(data_test, select = -c(X,user_name))
+
+data_training<-data_training[,!(grepl("window|timestamp", colnames(data_training)))]
+data_test<-data_test[,!(grepl("window|timestamp", colnames(data_test)))]
+```
+
+
+# Modeling
+
+
+```{r }
+
+# Creating test and training datasets from data_training set and  Cross validation
+
+inTrain<-createDataPartition(data_training$classe,p=0.7,list = FALSE)
+training<-data_training[inTrain,]
+testing<-data_training[-inTrain,]
+
+# RF-willuse a Random forests a method well-suited to problems with a relatively small number of 
+# observations with a large number of feature variables.
+
+controlPar<-trainControl(method = "cv",number=5)
+Random_model<-train(classe~.,data=training,method="rf", trControl=controlPar,ntree=50)
+
+Random_model
+
+prediction<-predict(Random_model,testing)
+table(predictions=prediction, actual=testing$classe)
+```
+
+
+# Predicting  20 different test cases
+
+
+```{r }
+prediction_test<-predict(Random_model,data_test)
+print(prediction_test)
+
+options(warn=0)
+```
